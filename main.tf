@@ -20,6 +20,63 @@ resource "aws_internet_gateway" "default" {
 }
 
 /*
+  NAT Instance
+*/
+
+resource "aws_security_group" "nat" {
+    name = "vpc_nat"
+    description = "Allow traffic to pass from the private subnet to the internet"
+
+    ingress {
+        from_port = 80
+        to_port = 80
+        protocol = "tcp"
+        cidr_blocks = ["${var.private_subnet_cidr}"]
+    }
+    ingress {
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        from_port = -1
+        to_port = -1
+        protocol = "icmp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    egress {
+        from_port = 80
+        to_port = 80
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    egress {
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = ["${var.vpc_cidr}"]
+    }
+    egress {
+        from_port = -1
+        to_port = -1
+        protocol = "icmp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    vpc_id = "${aws_vpc.default.id}"
+
+    tags {
+        Name = "NATSG"
+    }
+}
+
+resource "aws_eip" "nat" {
+    vpc = true
+}
+
+/*xx
   Public Subnet
 */
 resource "aws_subnet" "eu-west-1a-public" {
@@ -31,6 +88,11 @@ resource "aws_subnet" "eu-west-1a-public" {
     tags {
         Name = "Public Subnet"
     }
+}
+
+resource "aws_nat_gateway" "nat-gateway-parv" {
+  allocation_id = "${aws_eip.nat.id}"
+  subnet_id     = "${aws_subnet.eu-west-1a-public.id}"
 }
 
 resource "aws_route_table" "eu-west-1a-public" {
@@ -68,6 +130,10 @@ resource "aws_subnet" "eu-west-1a-private" {
 resource "aws_route_table" "eu-west-1a-private" {
     vpc_id = "${aws_vpc.default.id}"
 
+    route {
+        nat_gateway_id = "${aws_nat_gateway.nat-gateway-parv.id}"
+        cidr_block = "0.0.0.0/0"
+    }
     tags {
         Name = "Private Subnet"
     }
